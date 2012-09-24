@@ -1,0 +1,12 @@
+<node>
+  <interface name="org.ksr.chat.signals">
+    <signal name="message">
+        <arg name="nick" type="s" direction="out"/>
+        <arg name="content" type="s" direction="out"/>
+    </signal>
+    <signal name="action">
+        <arg name="nick" type="s" direction="out"/>
+        <arg name="text" type="s" direction="out"/>
+    </signal>
+  </interface>
+</node>
