@@ -49,7 +49,7 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-bin_PROGRAMS = ksr_chat$(EXEEXT)
+bin_PROGRAMS = ksr_chat_server$(EXEEXT) ksr_chat_client$(EXEEXT)
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -63,10 +63,15 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__objects_1 = chat-generated.$(OBJEXT)
-am_ksr_chat_OBJECTS = $(am__objects_1) main.$(OBJEXT)
-ksr_chat_OBJECTS = $(am_ksr_chat_OBJECTS)
+am_ksr_chat_client_OBJECTS = $(am__objects_1) main-client.$(OBJEXT)
+ksr_chat_client_OBJECTS = $(am_ksr_chat_client_OBJECTS)
 am__DEPENDENCIES_1 =
-ksr_chat_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+ksr_chat_client_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
+am_ksr_chat_server_OBJECTS = $(am__objects_1) main-server.$(OBJEXT)
+ksr_chat_server_OBJECTS = $(am_ksr_chat_server_OBJECTS)
+ksr_chat_server_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -75,8 +80,8 @@ COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
-SOURCES = $(ksr_chat_SOURCES)
-DIST_SOURCES = $(ksr_chat_SOURCES)
+SOURCES = $(ksr_chat_client_SOURCES) $(ksr_chat_server_SOURCES)
+DIST_SOURCES = $(ksr_chat_client_SOURCES) $(ksr_chat_server_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -179,12 +184,20 @@ AM_CFLAGS = \
     $(GLIB_CFLAGS)        \
 	$(GIO_CFLAGS)
 
-ksr_chat_SOURCES = \
-    $(dbus_built_sources) \
-    main.c
+ksr_chat_server_SOURCES = \
+    $(dbus_built_sources) 		\
+    main-server.c
 
-ksr_chat_LDADD = \
-	$(GLIB_LIBS) 	      \
+ksr_chat_client_SOURCES = \
+    $(dbus_built_sources) 		\
+    main-client.c
+
+ksr_chat_client_LDADD = \
+	$(GLIB_LIBS) 	      		\
+	$(GIO_LIBS)
+
+ksr_chat_server_LDADD = \
+	$(GLIB_LIBS) 	      		\
 	$(GIO_LIBS)
 
 dbus_built_sources = \
@@ -265,9 +278,12 @@ uninstall-binPROGRAMS:
 
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
-ksr_chat$(EXEEXT): $(ksr_chat_OBJECTS) $(ksr_chat_DEPENDENCIES) $(EXTRA_ksr_chat_DEPENDENCIES) 
-	@rm -f ksr_chat$(EXEEXT)
-	$(LINK) $(ksr_chat_OBJECTS) $(ksr_chat_LDADD) $(LIBS)
+ksr_chat_client$(EXEEXT): $(ksr_chat_client_OBJECTS) $(ksr_chat_client_DEPENDENCIES) $(EXTRA_ksr_chat_client_DEPENDENCIES) 
+	@rm -f ksr_chat_client$(EXEEXT)
+	$(LINK) $(ksr_chat_client_OBJECTS) $(ksr_chat_client_LDADD) $(LIBS)
+ksr_chat_server$(EXEEXT): $(ksr_chat_server_OBJECTS) $(ksr_chat_server_DEPENDENCIES) $(EXTRA_ksr_chat_server_DEPENDENCIES) 
+	@rm -f ksr_chat_server$(EXEEXT)
+	$(LINK) $(ksr_chat_server_OBJECTS) $(ksr_chat_server_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -276,7 +292,8 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/chat-generated.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main-client.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main-server.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
