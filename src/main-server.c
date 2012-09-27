@@ -1,13 +1,85 @@
-#include <gio/gio.h>
-#include "chat-generated.h"
 #include "ksr-chat.h"
+#include <glib.h>
+#include <gio/gio.h>
 
 gchar *opt_address;
 
-GOptionEntry opt_entries[] =
+static GDBusNodeInfo *introspection_data = NULL;
+
+static const gchar introspection_xml[] =
+  "<node>"
+  " <interface name='org.ksr.chat'>"
+  "  <method name='SendMessage'>"
+  "   <arg name='nick' type='s' direction='in'/>"
+  "   <arg name='content' type='s' direction='in'/>"
+  "  </method>"
+  "  <signal name='action'>"
+  "   <arg name='nick' type='s' direction='out'/>"
+  "   <arg name='action_type' type='s' direction='out'/>"
+  "  </signal>"
+  " </interface>"
+  "</node>";
+
+static void
+handle_method_call (GDBusConnection       *connection,
+                    const gchar           *sender,
+                    const gchar           *object_path,
+                    const gchar           *interface_name,
+                    const gchar           *method_name,
+                    GVariant              *parameters,
+                    GDBusMethodInvocation *invocation,
+                    gpointer               user_data)
 {
-  { "address", 'a', 0, G_OPTION_ARG_STRING, &opt_address, "Address under which the server will reside", NULL },
-  { NULL }
+	if (g_strcmp0 (method_name, "SendMessage") == 0)
+	{
+		gchar *nick;
+		gchar *content;
+
+		g_variant_get (parameters, "(&s&s)", &nick, &content);
+
+		g_print ("%s said: %s\n", nick, content);
+	}
+}
+
+static const GDBusInterfaceVTable interface_vtable =
+{
+	handle_method_call,
+	NULL,
+	NULL,
+};
+
+static gboolean
+on_new_connection (GDBusServer *server,
+                   GDBusConnection *connection,
+                   gpointer user_data)
+{
+	guint registration_id;
+	gchar *client_object;
+	guint client_number;
+
+	client_number = g_random_int_range(10000,19999);
+	client_object = g_strdup_printf ("%s/client%d", BUS_PATH,client_number);
+	g_print("%s\n",client_object);
+
+	g_print("Client no. %d connected.\n",client_number);
+
+	g_object_ref (connection);
+	registration_id = g_dbus_connection_register_object (connection,
+															client_object,
+															introspection_data->interfaces[0],
+															&interface_vtable,
+															NULL,  /* user_data */
+															NULL,  /* user_data_free_func */
+															NULL); /* GError** */
+	g_assert (registration_id > 0);
+
+	return TRUE;
+}
+
+GOptionEntry opt_entries[] =
+	{
+	{ "address", 'a', 0, G_OPTION_ARG_STRING, &opt_address, "Address under which the server will reside", NULL },
+	{ NULL }
 };
 
 static gboolean
@@ -19,15 +91,6 @@ input_is_valid ()
 		return 0;
 	}
 	return 1;
-}
-
-static gboolean
-on_new_connection (GDBusServer *server,
-					GDBusConnection *connection,
-					gpointer user_data)
-{
-	 g_print ("Client connected.\n");
-	 return TRUE;
 }
 
 int
@@ -43,6 +106,9 @@ main (int argc, char *argv[])
 	gchar *action;
 	gchar *message;
 	gint ret;
+
+	introspection_data = g_dbus_node_info_new_for_xml (introspection_xml, NULL);
+	g_assert (introspection_data != NULL);
 
 	guid = g_dbus_generate_guid ();
 	server_flags = G_DBUS_SERVER_FLAGS_NONE;
@@ -90,8 +156,6 @@ main (int argc, char *argv[])
 						NULL);
 
 	loop = g_main_loop_new (NULL, FALSE);
-
-
 
 	g_main_loop_run (loop);
 

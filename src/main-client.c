@@ -1,9 +1,10 @@
-#include <gio/gio.h>
-#include "chat-generated.h"
 #include "ksr-chat.h"
+#include <glib.h>
+#include <gio/gio.h>
 
 static gchar *opt_name           = NULL;
 static gchar *opt_address        = NULL;
+static GDBusConnection *connection;
 
 static GOptionEntry opt_entries[] =
 {
@@ -12,23 +13,33 @@ static GOptionEntry opt_entries[] =
 	{ NULL }
 };
 
-static gboolean
+static void
 handle_input (GIOChannel *io_channel, gpointer *data)
 {
 	GIOStatus ret;
 	GError *error;
 	gchar *input;
-	gint *len;
+	gsize *len;
+	gint value;
 
 	error = NULL;
 	ret = g_io_channel_read_line (io_channel, &input, &len, NULL, &error);
 	if (ret == G_IO_STATUS_ERROR)
 			g_error ("Error reading: %s\n", error->message);
 
-	printf ("Read %u bytes: %s\n", len, input);
+	value = g_dbus_connection_call_sync (connection,
+										   NULL, /* bus_name */
+										   "/org/gtk/GDBus/TestObject",
+										   "org.gtk.GDBus.TestPeerInterface",
+										   "SendMessage",
+										   g_variant_new ("(ss)", opt_name,input),
+										   NULL,
+										   G_DBUS_CALL_FLAGS_NONE,
+										   -1,
+										   NULL,
+										   &error);
 
 	g_free(input);
-	return TRUE;
 }
 
 static gboolean
@@ -48,17 +59,19 @@ main (int argc, char *argv[])
 	GOptionContext *opt_context;
 	GError *error;
 	GMainLoop *loop;
-	GDBusConnection *connection;
 	GDBusConnectionFlags connection_flags;
 	GIOChannel *io_channel;
+	GDBusProxyFlags proxy_flags;
 
 	gchar *input;
-	gint len;
+	gchar *object_path;
+	gsize *len;
 	gint ret,ret_loc;
 
 	ret = 1;
 	g_type_init ();
 	error = NULL;
+	object_path = NULL;
 
 	opt_context = g_option_context_new ("ksr-chat-client() usage:");
 	g_option_context_set_summary (opt_context,
@@ -93,6 +106,9 @@ main (int argc, char *argv[])
 
 	g_printf ("Connected to server!\n");
 
+	object_path = g_strdup_printf("%s.%s", BUS_PATH, opt_name);
+	proxy_flags = G_DBUS_PROXY_FLAGS_NONE;
+
 
 	loop = g_main_loop_new (NULL, FALSE);
 
@@ -109,7 +125,6 @@ main (int argc, char *argv[])
 	ret = 0;
 
 	out:
-
 	g_option_context_free (opt_context);
 	return ret;
 }
