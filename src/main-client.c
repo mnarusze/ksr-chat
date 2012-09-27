@@ -1,5 +1,6 @@
 #include <gio/gio.h>
 #include "chat-generated.h"
+#include "ksr-chat.h"
 
 static gchar *opt_name           = NULL;
 static gchar *opt_address        = NULL;
@@ -12,6 +13,25 @@ static GOptionEntry opt_entries[] =
 };
 
 static gboolean
+handle_input (GIOChannel *io_channel, gpointer *data)
+{
+	GIOStatus ret;
+	GError *error;
+	gchar *input;
+	gint *len;
+
+	error = NULL;
+	ret = g_io_channel_read_line (io_channel, &input, &len, NULL, &error);
+	if (ret == G_IO_STATUS_ERROR)
+			g_error ("Error reading: %s\n", error->message);
+
+	printf ("Read %u bytes: %s\n", len, input);
+
+	g_free(input);
+	return TRUE;
+}
+
+static gboolean
 input_is_valid ()
 {
 	if (opt_name == NULL || opt_address == NULL)
@@ -22,30 +42,6 @@ input_is_valid ()
 	return 1;
 }
 
-static void
-on_bus_acquired (GDBusConnection *connection,
-					const gchar     *name,
-					gpointer         user_data)
-{
-	/* This is where we'd export some objects on the bus */
-}
-
-static void
-on_name_acquired (GDBusConnection *connection,
-					const gchar     *name,
-					gpointer         user_data)
-{
-	g_print ("Acquired the name %s on the session bus\n", name);
-}
-
-static void
-on_name_lost (GDBusConnection *connection,
-				const gchar     *name,
-				gpointer         user_data)
-{
-	g_print ("Lost the name %s on the session bus\n", name);
-}
-
 int
 main (int argc, char *argv[])
 {
@@ -54,11 +50,11 @@ main (int argc, char *argv[])
 	GMainLoop *loop;
 	GDBusConnection *connection;
 	GDBusConnectionFlags connection_flags;
-	GBusNameOwnerFlags name_owner_flags;
+	GIOChannel *io_channel;
 
-	gint ret;
-	gchar *object_path;
-	guint owner_id;
+	gchar *input;
+	gint len;
+	gint ret,ret_loc;
 
 	ret = 1;
 	g_type_init ();
@@ -66,8 +62,8 @@ main (int argc, char *argv[])
 
 	opt_context = g_option_context_new ("ksr-chat-client() usage:");
 	g_option_context_set_summary (opt_context,
-									"To connect to server under address as \"nickname\" and start chatting, use:\n"
-									"  \"ksr-chat -n nickname -a address");
+									"To connect to server under tcp:host=0.0.0.0 as \"maryl\" and start chatting, use:\n"
+									"  \"ksr-chat-client -n maryl -a tcp:host=0.0.0.0");
 	g_option_context_add_main_entries (opt_context, opt_entries, NULL);
 
 	if (!g_option_context_parse (opt_context, &argc, &argv, &error))
@@ -80,50 +76,35 @@ main (int argc, char *argv[])
 	if (!input_is_valid())
 		goto out;
 
-	object_path = g_strdup_printf("org.ksr.chat.%s", opt_name);
 	connection_flags = G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT;
 
-	g_printf ("Connecting to bus under %s...\n",opt_address);
-	connection = g_dbus_connection_new_for_address_sync(opt_address,
-														connection_flags,
-														NULL,
-														NULL,
-														error);
+	connection = g_dbus_connection_new_for_address_sync (opt_address,
+														   connection_flags,
+														   NULL, /* GDBusAuthObserver */
+														   NULL, /* GCancellable */
+														   &error);
 
 	if (connection == NULL)
 	{
 		g_printerr ("Error connecting to the DBus : %s\n", error->message);
+		g_error_free(error);
 		goto out;
 	}
 
-	g_printf ("Connected to the DBus! Connecting to the chat...\n");
+	g_printf ("Connected to server!\n");
 
-	name_owner_flags = G_BUS_NAME_OWNER_FLAGS_NONE;
-	owner_id = g_bus_own_name_on_connection(connection,
-											object_path,
-											name_owner_flags,
-											on_name_acquired,
-											on_name_lost,
-											error,
-											NULL);
-
-	if (owner_id == NULL)
-		goto out;
 
 	loop = g_main_loop_new (NULL, FALSE);
+
+	// FD = 0 = stdin
+	io_channel = g_io_channel_unix_new(0);
+
+	if (!g_io_add_watch (io_channel, G_IO_IN, handle_input, NULL))
+			g_error ("Cannot add watch on GIOChannel!\n");
+
 	g_main_loop_run (loop);
 
-	/*
-	 * Cleanup
-	 */
-	if (g_dbus_connection_close_sync(connection,NULL,error))
-		g_printf ("Closed connection successfully!\n");
-	else
-		g_printerr ("Error closing the connection : %s\n", error->message);
-
-	g_bus_unown_name (owner_id);
 	g_main_loop_unref (loop);
-	g_free(object_path);
 
 	ret = 0;
 

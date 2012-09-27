@@ -1,47 +1,33 @@
 #include <gio/gio.h>
 #include "chat-generated.h"
+#include "ksr-chat.h"
 
-gchar *opt_name;
+gchar *opt_address;
 
 GOptionEntry opt_entries[] =
 {
-  { "name", 'n', 0, G_OPTION_ARG_STRING, &opt_name, "Name to acquire", NULL },
+  { "address", 'a', 0, G_OPTION_ARG_STRING, &opt_address, "Address under which the server will reside", NULL },
   { NULL }
 };
 
 static gboolean
 input_is_valid ()
 {
-	if (opt_name == NULL)
+	if (opt_address == NULL)
 	{
-		g_printerr ("Incorrect usage, use \"ksr-chat --help\" for help.\n");
+		g_printerr ("Incorrect usage, use \"ksr-chat-server --help\" for help.\n");
 		return 0;
 	}
 	return 1;
 }
 
-static void
-on_bus_acquired (GDBusConnection *connection,
-					const gchar     *name,
-					gpointer         user_data)
+static gboolean
+on_new_connection (GDBusServer *server,
+					GDBusConnection *connection,
+					gpointer user_data)
 {
-	/* This is where we'd export some objects on the bus */
-}
-
-static void
-on_name_acquired (GDBusConnection *connection,
-					const gchar     *name,
-					gpointer         user_data)
-{
-	g_print ("Acquired the name %s on the session bus\n", name);
-}
-
-static void
-on_name_lost (GDBusConnection *connection,
-				const gchar     *name,
-				gpointer         user_data)
-{
-	g_print ("Lost the name %s on the session bus\n", name);
+	 g_print ("Client connected.\n");
+	 return TRUE;
 }
 
 int
@@ -50,50 +36,69 @@ main (int argc, char *argv[])
 	GOptionContext *opt_context;
 	GError *error;
 	GMainLoop *loop;
-	GBusNameOwnerFlags name_flags;
+	GDBusServer *server;
+	gchar *guid;
+	GDBusServerFlags server_flags;
 
+	gchar *action;
+	gchar *message;
 	gint ret;
-	gchar *object_path;
-	guint owner_id;
 
+	guid = g_dbus_generate_guid ();
+	server_flags = G_DBUS_SERVER_FLAGS_NONE;
 	ret = 1;
 	g_type_init ();
 	error = NULL;
 
 	opt_context = g_option_context_new ("ksr-chat-server() usage:");
 	g_option_context_set_summary (opt_context,
-									"To start a local server located under org.ksr.chat.my_server use:\n"
-									"  \"ksr-chat-server -n my_server\"");
+									"To start a local server located under tcp:host=0.0.0.0, use:\n"
+									"  \"ksr-chat-server -a tcp:host=0.0.0.0\"");
 
 	g_option_context_add_main_entries (opt_context, opt_entries, NULL);
 
 	if (!g_option_context_parse (opt_context, &argc, &argv, &error))
 	{
 		g_printerr ("Error parsing options: %s\n", error->message);
-		return 1;
+		goto out;
 	}
 
 	if (!input_is_valid())
-		return 1;
+		goto out;
 
-	name_flags = G_BUS_NAME_OWNER_FLAGS_NONE;
-	error = NULL;
-	object_path = g_strdup_printf("org.ksr.chat.%s", opt_name);
+	server = g_dbus_server_new_sync (opt_address,
+										server_flags,
+										guid,
+										NULL, /* GDBusAuthObserver */
+										NULL, /* GCancellable */
+										&error);
 
-	owner_id = g_bus_own_name (G_BUS_TYPE_SESSION,
-								object_path,
-								name_flags,
-								on_bus_acquired,
-								on_name_acquired,
-								on_name_lost,
-								NULL,
-								NULL);
+	g_dbus_server_start (server);
+	g_free (guid);
+
+	if (server == NULL)
+	{
+		g_printerr ("Error creating server at address %s: %s\n", opt_address, error->message);
+		g_error_free (error);
+		goto out;
+	}
+
+	g_print ("Server is listening at: %s\n", g_dbus_server_get_client_address (server));
+	g_signal_connect (server,
+						"new-connection",
+						G_CALLBACK (on_new_connection),
+						NULL);
 
 	loop = g_main_loop_new (NULL, FALSE);
+
+
+
 	g_main_loop_run (loop);
 
-	g_bus_unown_name (owner_id);
 	g_main_loop_unref (loop);
 
-	return 0;
+	ret = 0;
+
+	out:
+	return ret;
 }

@@ -26,8 +26,8 @@ dbus_built_sources = \
 
 $(dbus_built_sources) : $(top_srcdir)/data/org.ksr.chat.xml
 	gdbus-codegen							                \
-		--interface-prefix org.ksr.chat.                    \
-		--c-namespace chat							        \
+		--interface-prefix org.ksr                          \
+		--c-namespace ksr    						        \
 		--generate-c-code chat-generated                    \
 		$(top_srcdir)/data/org.ksr.chat.xml	
 

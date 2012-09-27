@@ -1,5 +1,5 @@
 <node>
-  <interface name="org.ksr.chat.user">
+  <interface name="org.ksr.chat">
     <signal name="message">
         <arg name="nick" type="s" direction="out"/>
         <arg name="content" type="s" direction="out"/>
