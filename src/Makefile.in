@@ -68,7 +68,8 @@ ksr_chat_client_OBJECTS = $(am_ksr_chat_client_OBJECTS)
 am__DEPENDENCIES_1 =
 ksr_chat_client_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
-am_ksr_chat_server_OBJECTS = $(am__objects_1) main-server.$(OBJEXT)
+am_ksr_chat_server_OBJECTS = $(am__objects_1) ksr-chat.$(OBJEXT) \
+	main-server.$(OBJEXT)
 ksr_chat_server_OBJECTS = $(am_ksr_chat_server_OBJECTS)
 ksr_chat_server_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
@@ -186,6 +187,7 @@ AM_CFLAGS = \
 
 ksr_chat_server_SOURCES = \
     $(dbus_built_sources) 		\
+    ksr-chat.c					\
     main-server.c
 
 ksr_chat_client_SOURCES = \
@@ -292,6 +294,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/chat-generated.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ksr-chat.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main-client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main-server.Po@am__quote@
 

@@ -56,12 +56,14 @@ on_new_connection (GDBusServer *server,
 	guint registration_id;
 	gchar *client_object;
 	guint client_number;
+	GCredentials *client_credentials;
 
-	client_number = g_random_int_range(10000,19999);
-	client_object = g_strdup_printf ("%s/client%d", BUS_PATH,client_number);
+	client_credentials = g_dbus_connection_get_peer_credentials(connection);
+	client_number = g_credentials_get_pid(client_credentials);
+	client_object = g_strdup_printf ("%s/client%s", OBJECT_PATH,client_number);
 	g_print("%s\n",client_object);
 
-	g_print("Client no. %d connected.\n",client_number);
+	g_print("Client no. %s connected.\n",client_number);
 
 	g_object_ref (connection);
 	registration_id = g_dbus_connection_register_object (connection,

@@ -6,6 +6,7 @@ AM_CFLAGS = \
 
 ksr_chat_server_SOURCES =       \
     $(dbus_built_sources) 		\
+    ksr-chat.c					\
     main-server.c
 
 ksr_chat_client_SOURCES =       \

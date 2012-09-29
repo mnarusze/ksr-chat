@@ -106,7 +106,7 @@ main (int argc, char *argv[])
 
 	g_printf ("Connected to server!\n");
 
-	object_path = g_strdup_printf("%s.%s", BUS_PATH, opt_name);
+	object_path = g_strdup_printf("%s.%s", OBJECT_PATH, opt_name);
 	proxy_flags = G_DBUS_PROXY_FLAGS_NONE;
 
 
