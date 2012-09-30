@@ -68,11 +68,33 @@ handle_method_call (GDBusConnection       *connection,
 		gchar *client_object;
 		gchar *response;
 		gboolean unregistered;
+		gboolean unique_username;
 		GUser user;
 
 		g_variant_get (parameters, "(&s)", &nickname);
 		client_object = g_strdup_printf ("%s/%s", OBJECT_PATH,nickname);
 		error = NULL;
+		unique_username = TRUE;
+
+		for (i = 0 ; i < users->len; i++)
+		{
+			user = g_array_index (users, GUser, i);
+			if (g_strcmp0(user.nickname, nickname) == 0)
+			{
+				unique_username = FALSE;
+				break;
+			}
+		}
+
+		if (unique_username == FALSE)
+		{
+			g_print ("%s already registered, not registering the new one!\n",nickname);
+			response = g_strdup (&REGISTRATION_RESPONSE_NOT_OK);
+			g_dbus_method_invocation_return_value (invocation,
+													 g_variant_new ("(s)", response));
+			g_free (response);
+			return;
+		}
 
 		g_object_ref (connection);
 		unregistered = g_dbus_connection_unregister_object(connection,temp_registration_id);
@@ -117,22 +139,8 @@ handle_method_call (GDBusConnection       *connection,
 													 g_variant_new ("(s)", response));
 			g_free (response);
 		}
-		else
-		{
-			if (error->code == G_IO_ERROR_EXISTS)
-				g_print ("%s already registered, not registering the new one!\n",nickname);
-			else
-				g_print ("Unknown error, can't register : \n",error->message);
-			response = g_strdup (&REGISTRATION_RESPONSE_NOT_OK);
-			g_dbus_method_invocation_return_value (invocation,
-													 g_variant_new ("(s)", response));
-			g_free (response);
-
-		}
 
 		g_print_users_info (users);
-		g_dbus_connection_unregister_object(connection,temp_registration_id);
-
 	}
 	else if (g_strcmp0 (method_name, "SendMessage") == 0)
 	{

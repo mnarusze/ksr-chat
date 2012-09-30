@@ -15,6 +15,21 @@ static GOptionEntry opt_entries[] =
 	{ NULL }
 };
 
+static void
+print_information (gchar *text)
+{
+	g_print ("  %s\n",text);
+}
+
+static void
+print_allowed_operations ()
+{
+	print_information("/h : print this help");
+	print_information("/l : list chat users");
+	print_information("/m <nick> : send a private message to \"nick\"");
+	print_information("/q : quit chat");
+}
+
 static gboolean
 handle_input (GIOChannel *io_channel, gpointer *data)
 {
@@ -33,18 +48,34 @@ handle_input (GIOChannel *io_channel, gpointer *data)
 		return FALSE;
 	}
 
+	if (input[0] == '/')
+	{
+		// Special options - handle the allowed ones
+		switch (input[1])
+		{
+			case 'h':
+				print_allowed_operations();
+				break;
+			default:
+				print_information("Unknown command! Use \"/h\" for help.");
+				break;
+		}
+		return TRUE;
+	}
+
 	input = g_regex_replace(disallowed_chars,input,g_utf8_strlen(input,MAX_CHAR),0,g_strdup(""),0,NULL);
-	value = g_dbus_connection_call_sync (connection,
-										   NULL, /* bus_name */
-										   object_path,
-										   INTERFACE_PATH,
-										   "SendMessage",
-										   g_variant_new ("(ss)", opt_name, input),
-										   NULL,
-										   G_DBUS_CALL_FLAGS_NONE,
-										   -1,
-										   NULL,
-										   &error);
+	g_dbus_connection_call (connection,
+							   NULL, /* bus_name */
+							   object_path,
+							   INTERFACE_PATH,
+							   "SendMessage",
+							   g_variant_new ("(ss)", opt_name, input),
+							   NULL,
+							   G_DBUS_CALL_FLAGS_NONE,
+							   -1,
+							   NULL,
+							   NULL,
+							   &error);
 	g_free(input);
 	return TRUE;
 }
