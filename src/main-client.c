@@ -1,10 +1,12 @@
-#include "ksr-chat.h"
 #include <glib.h>
 #include <gio/gio.h>
+#include "ksr-chat.h"
 
 static gchar *opt_name           = NULL;
 static gchar *opt_address        = NULL;
+static gchar *object_path		 = NULL;
 static GDBusConnection *connection;
+static GRegex *disallowed_chars  = NULL;
 
 static GOptionEntry opt_entries[] =
 {
@@ -13,34 +15,53 @@ static GOptionEntry opt_entries[] =
 	{ NULL }
 };
 
-static void
+static gboolean
 handle_input (GIOChannel *io_channel, gpointer *data)
 {
 	GIOStatus ret;
 	GError *error;
+	GVariant *value;
 	gchar *input;
 	gsize *len;
-	gint value;
 
 	error = NULL;
-	ret = g_io_channel_read_line (io_channel, &input, &len, NULL, &error);
-	if (ret == G_IO_STATUS_ERROR)
-			g_error ("Error reading: %s\n", error->message);
 
+	ret = g_io_channel_read_line (io_channel, &input, len, NULL, &error);
+	if (ret == G_IO_STATUS_ERROR)
+	{
+		g_error ("Error reading: %s\n", error->message);
+		return FALSE;
+	}
+
+	input = g_regex_replace(disallowed_chars,input,g_utf8_strlen(input,MAX_CHAR),0,g_strdup(""),0,NULL);
 	value = g_dbus_connection_call_sync (connection,
 										   NULL, /* bus_name */
-										   "/org/gtk/GDBus/TestObject",
-										   "org.gtk.GDBus.TestPeerInterface",
+										   object_path,
+										   INTERFACE_PATH,
 										   "SendMessage",
-										   g_variant_new ("(ss)", opt_name,input),
+										   g_variant_new ("(ss)", opt_name, input),
 										   NULL,
 										   G_DBUS_CALL_FLAGS_NONE,
 										   -1,
 										   NULL,
 										   &error);
-
 	g_free(input);
+	return TRUE;
 }
+
+static void
+handle_signals (GDBusConnection *connection,
+        const gchar *sender_name,
+        const gchar *object_path,
+        const gchar *interface_name,
+        const gchar *signal_name,
+        GVariant *parameters,
+        gpointer user_data)
+{
+
+
+}
+
 
 static gboolean
 input_is_valid ()
@@ -62,9 +83,11 @@ main (int argc, char *argv[])
 	GDBusConnectionFlags connection_flags;
 	GIOChannel *io_channel;
 	GDBusProxyFlags proxy_flags;
-
+	GDBusMessage *message;
+	GVariant *value;
+	gchar *client_ident;
 	gchar *input;
-	gchar *object_path;
+	gchar *response;
 	gsize *len;
 	gint ret,ret_loc;
 
@@ -104,18 +127,59 @@ main (int argc, char *argv[])
 		goto out;
 	}
 
-	g_printf ("Connected to server!\n");
+	g_print ("Connected to server!\n");
 
-	object_path = g_strdup_printf("%s.%s", OBJECT_PATH, opt_name);
-	proxy_flags = G_DBUS_PROXY_FLAGS_NONE;
+	disallowed_chars = g_regex_new("\n", 0, 0, NULL);
+	object_path = g_strdup_printf ("%s/%s", OBJECT_PATH,opt_name);
 
+	// Now register the nickname
+	error = NULL;
+	value = g_dbus_connection_call_sync (connection,
+											   NULL,
+											   TMP_OBJECT_PATH,
+											   INTERFACE_PATH,
+											   "RegisterMe",
+											   g_variant_new ("(s)", opt_name),
+											   NULL,
+											   G_DBUS_CALL_FLAGS_NONE,
+											   -1,
+											   NULL,
+											   &error);
+
+	if (value == NULL)
+	{
+		g_printerr ("Could not register!\n");
+		goto out;
+	}
+	else
+	{
+		g_variant_get (value, "(&s)", &response);
+		if (g_strcmp0(response,REGISTRATION_RESPONSE_OK) == 0)
+			g_print ("Registered a nickname %s , the chat is ready!\n",opt_name);
+		else if (g_strcmp0(response,REGISTRATION_RESPONSE_NOT_OK) == 0)
+		{
+			g_print ("Could not register your nickname %s, please change it!\n",opt_name);
+			goto out;
+		}
+	}
+
+	g_dbus_connection_signal_subscribe(connection,
+										NULL,
+										INTERFACE_PATH,
+										NULL,
+										NULL,
+										NULL,
+										G_DBUS_SIGNAL_FLAGS_NONE,
+										handle_signals,
+										NULL,
+										NULL);
 
 	loop = g_main_loop_new (NULL, FALSE);
 
 	// FD = 0 = stdin
 	io_channel = g_io_channel_unix_new(0);
 
-	if (!g_io_add_watch (io_channel, G_IO_IN, handle_input, NULL))
+	if (!g_io_add_watch_full (io_channel, G_PRIORITY_HIGH, G_IO_IN, handle_input, NULL, NULL))
 			g_error ("Cannot add watch on GIOChannel!\n");
 
 	g_main_loop_run (loop);

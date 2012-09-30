@@ -1,24 +1,54 @@
-#include "ksr-chat.h"
 #include <glib.h>
 #include <gio/gio.h>
+#include "ksr-chat.h"
 
 gchar *opt_address;
+guint temp_registration_id;
+GList *users;
 
 static GDBusNodeInfo *introspection_data = NULL;
 
 static const gchar introspection_xml[] =
   "<node>"
-  " <interface name='org.ksr.chat'>"
+  " <interface name='org.ksr.chat.Interface'>"
+  "  <method name='RegisterMe'>"
+  "   <arg name='nick' type='s' direction='in'/>"
+  "   <arg name='response' type='s' direction='out'/>"
+  "  </method>"
   "  <method name='SendMessage'>"
   "   <arg name='nick' type='s' direction='in'/>"
-  "   <arg name='content' type='s' direction='in'/>"
+  "   <arg name='body' type='s' direction='in'/>"
   "  </method>"
+  "  <signal name='message'>"
+  "   <arg name='nick' type='s'/>"
+  "   <arg name='body' type='s'/>"
+  "  </signal>"
   "  <signal name='action'>"
-  "   <arg name='nick' type='s' direction='out'/>"
-  "   <arg name='action_type' type='s' direction='out'/>"
+  "   <arg name='nick' type='s'/>"
+  "   <arg name='type' type='s'/>"
   "  </signal>"
   " </interface>"
   "</node>";
+
+
+static const GDBusInterfaceVTable interface_vtable =
+{
+	handle_method_call,
+	NULL,
+	NULL,
+};
+
+void g_print_users_info (GList *users)
+{
+	GList *elem;
+	struct GUser *user;
+	gint iter;
+	for (elem = users , iter = 0; elem; elem = elem->next, iter++)
+	{
+		user = (struct GUser*)elem->data;
+		g_print ("User no %d\n  Nick: %s\n  Registration ID: %s\n",&iter, user->nickname , &(user->registration_id));
+	}
+}
 
 static void
 handle_method_call (GDBusConnection       *connection,
@@ -30,59 +60,103 @@ handle_method_call (GDBusConnection       *connection,
                     GDBusMethodInvocation *invocation,
                     gpointer               user_data)
 {
-	if (g_strcmp0 (method_name, "SendMessage") == 0)
+	if (g_strcmp0 (method_name, "RegisterMe") == 0)
+	{
+		GError *error;
+		gchar *nickname;
+		gint registration_id;
+		gchar *client_object;
+		gchar *response;
+		gboolean unregistered;
+		struct GUser user;
+
+		g_variant_get (parameters, "(&s)", &nickname);
+		client_object = g_strdup_printf ("%s/%s", OBJECT_PATH,nickname);
+		g_print("Object : %s\n",client_object);
+		error = NULL;
+
+		g_object_ref (connection);
+		unregistered = g_dbus_connection_unregister_object(connection,temp_registration_id);
+
+		if (unregistered == FALSE)
+		{
+			g_printerr ("Error unregistering the temp object!\n");
+		}
+
+		registration_id = g_dbus_connection_register_object (connection,
+																client_object,
+																introspection_data->interfaces[0],
+																&interface_vtable,
+																NULL,
+																NULL,
+																&error);
+		if (registration_id <= 0)
+		{
+			g_print ("%s not registered!\n",nickname);
+			response = g_strdup (&REGISTRATION_RESPONSE_NOT_OK);
+			g_dbus_method_invocation_return_value (invocation,
+													 g_variant_new ("(s)", response));
+		    g_free (response);
+		}
+		else if (error == NULL)
+		{
+			g_print ("%s registered with ID %d!\n",nickname,registration_id);
+			user.registration_id = registration_id;
+			user.nickname = nickname;
+			g_list_append(users,&user);
+			response = g_strdup (&REGISTRATION_RESPONSE_OK);
+			g_print ("Sending confirmation...\n");
+			g_dbus_method_invocation_return_value (invocation,
+													 g_variant_new ("(s)", response));
+			g_print ("Confirmation sent!\n");
+		}
+		else
+		{
+			if (error->code == G_IO_ERROR_EXISTS)
+				g_print ("%s already registered, not registering the new one!\n",nickname);
+			else
+				g_print ("Unknown error, can't register : \n",error->message);
+			response = g_strdup (&REGISTRATION_RESPONSE_NOT_OK);
+			g_dbus_method_invocation_return_value (invocation,
+													 g_variant_new ("(s)", response));
+			g_free (response);
+		}
+
+		g_dbus_connection_unregister_object(connection,temp_registration_id);
+
+	}
+	else if (g_strcmp0 (method_name, "SendMessage") == 0)
 	{
 		gchar *nick;
 		gchar *content;
 
 		g_variant_get (parameters, "(&s&s)", &nick, &content);
 
-		g_print ("%s said: %s\n", nick, content);
+		g_print ("%s: %s\n", nick, content);
+	}
+	else
+	{
+		 g_printerr ("Unknown method!\n");
 	}
 }
-
-static const GDBusInterfaceVTable interface_vtable =
-{
-	handle_method_call,
-	NULL,
-	NULL,
-};
 
 static gboolean
 on_new_connection (GDBusServer *server,
                    GDBusConnection *connection,
                    gpointer user_data)
 {
-	guint registration_id;
-	gchar *client_object;
-	guint client_number;
-	GCredentials *client_credentials;
-
-	client_credentials = g_dbus_connection_get_peer_credentials(connection);
-	client_number = g_credentials_get_pid(client_credentials);
-	client_object = g_strdup_printf ("%s/client%s", OBJECT_PATH,client_number);
-	g_print("%s\n",client_object);
-
-	g_print("Client no. %s connected.\n",client_number);
-
 	g_object_ref (connection);
-	registration_id = g_dbus_connection_register_object (connection,
-															client_object,
+	temp_registration_id = g_dbus_connection_register_object (connection,
+															TMP_OBJECT_PATH,
 															introspection_data->interfaces[0],
 															&interface_vtable,
 															NULL,  /* user_data */
 															NULL,  /* user_data_free_func */
 															NULL); /* GError** */
-	g_assert (registration_id > 0);
+	g_assert (temp_registration_id > 0);
 
 	return TRUE;
 }
-
-GOptionEntry opt_entries[] =
-	{
-	{ "address", 'a', 0, G_OPTION_ARG_STRING, &opt_address, "Address under which the server will reside", NULL },
-	{ NULL }
-};
 
 static gboolean
 input_is_valid ()
@@ -94,6 +168,12 @@ input_is_valid ()
 	}
 	return 1;
 }
+
+GOptionEntry opt_entries[] =
+	{
+	{ "address", 'a', 0, G_OPTION_ARG_STRING, &opt_address, "Address under which the server will reside", NULL },
+	{ NULL }
+};
 
 int
 main (int argc, char *argv[])
@@ -111,6 +191,7 @@ main (int argc, char *argv[])
 
 	introspection_data = g_dbus_node_info_new_for_xml (introspection_xml, NULL);
 	g_assert (introspection_data != NULL);
+	users = NULL;
 
 	guid = g_dbus_generate_guid ();
 	server_flags = G_DBUS_SERVER_FLAGS_NONE;
