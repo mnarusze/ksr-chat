@@ -64,6 +64,7 @@ handle_method_call (GDBusConnection       *connection,
 		GError *error;
 		gchar *nickname;
 		gint registration_id;
+		gint i;
 		gchar *client_object;
 		gchar *response;
 		gboolean unregistered;
@@ -99,12 +100,12 @@ handle_method_call (GDBusConnection       *connection,
 		else if (error == NULL)
 		{
 			user.registration_id = registration_id;
-			int i = 0;
+			i = 0;
 			for (; i < MAX_CHAR; i++)
 			{
+				user.nickname[i] = nickname[i];
 				if (nickname[i] == 0)
 					break;
-				user.nickname[i] = nickname[i];
 			}
 			user.connection = connection;
 			g_print ("%s joined the chat. Number : %d\n",user.nickname,user.registration_id);
@@ -129,8 +130,6 @@ handle_method_call (GDBusConnection       *connection,
 
 		}
 
-		//struct GUser *user0 = (struct GUser*)users[0].data;
-		//g_print ("User 0 : %s %d\n",user0->nickname,user0->registration_id);
 		g_print_users_info (users);
 		g_dbus_connection_unregister_object(connection,temp_registration_id);
 
@@ -139,11 +138,33 @@ handle_method_call (GDBusConnection       *connection,
 	{
 		gchar *nick;
 		gchar *content;
+		gchar *object_path;
+		gint iter;
+		GError *error;
+		GUser user;
 
 		g_variant_get (parameters, "(&s&s)", &nick, &content);
+		error = NULL;
 
 		g_print ("%s: %s\n", nick, content);
 
+		for (iter = 0; iter < users->len ; iter++)
+		{
+			user = g_array_index (users, GUser, iter);
+			if (g_strcmp0(nick,user.nickname) == 0)
+				continue;
+			object_path = g_strdup_printf("%s/%s", OBJECT_PATH, &user.nickname);
+			g_dbus_connection_emit_signal(user.connection,
+											NULL,
+											object_path,
+											INTERFACE_PATH,
+											"message",
+											g_variant_new ("(ss)",
+															nick,
+															content),
+											&error);
+
+		}
 
 	}
 	else
