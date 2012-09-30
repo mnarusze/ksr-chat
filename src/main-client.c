@@ -58,7 +58,23 @@ handle_signals (GDBusConnection *connection,
         GVariant *parameters,
         gpointer user_data)
 {
+	if (g_strcmp0 (signal_name, "message") == 0)
+	{
+		gchar *nick,*body;
+		g_variant_get (parameters, "(&s&s)", &nick, &body);
+		if (nick == NULL || body == NULL)
+		{
+			g_printerr ("Error : empty nick or body of the message!\n");
+			return;
+		}
+		g_print ("%s: %s\n",nick,body);
+		g_free (nick);
+		g_free (body);
+	}
+	else if (g_strcmp0 (signal_name, "action") == 0)
+	{
 
+	}
 
 }
 

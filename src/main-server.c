@@ -4,7 +4,7 @@
 
 gchar *opt_address;
 guint temp_registration_id;
-GList *users;
+static GArray *users;
 
 static GDBusNodeInfo *introspection_data = NULL;
 
@@ -38,15 +38,14 @@ static const GDBusInterfaceVTable interface_vtable =
 	NULL,
 };
 
-void g_print_users_info (GList *users)
+void g_print_users_info (GArray *users)
 {
-	GList *elem;
-	struct GUser *user;
+	GUser user;
 	gint iter;
-	for (elem = users , iter = 0; elem; elem = elem->next, iter++)
+	for (iter = 0; iter < users->len; iter++)
 	{
-		user = (struct GUser*)elem->data;
-		g_print ("User no %d\n  Nick: %s\n  Registration ID: %s\n",&iter, user->nickname , &(user->registration_id));
+		user = g_array_index (users, GUser, iter);
+		g_print ("User no %d\n  Nick: %s\n  Registration ID: %d\n", iter , &user.nickname , user.registration_id);
 	}
 }
 
@@ -68,11 +67,10 @@ handle_method_call (GDBusConnection       *connection,
 		gchar *client_object;
 		gchar *response;
 		gboolean unregistered;
-		struct GUser user;
+		GUser user;
 
 		g_variant_get (parameters, "(&s)", &nickname);
 		client_object = g_strdup_printf ("%s/%s", OBJECT_PATH,nickname);
-		g_print("Object : %s\n",client_object);
 		error = NULL;
 
 		g_object_ref (connection);
@@ -100,15 +98,23 @@ handle_method_call (GDBusConnection       *connection,
 		}
 		else if (error == NULL)
 		{
-			g_print ("%s registered with ID %d!\n",nickname,registration_id);
 			user.registration_id = registration_id;
-			user.nickname = nickname;
-			g_list_append(users,&user);
+			int i = 0;
+			for (; i < MAX_CHAR; i++)
+			{
+				if (nickname[i] == 0)
+					break;
+				user.nickname[i] = nickname[i];
+			}
+			user.connection = connection;
+			g_print ("%s joined the chat. Number : %d\n",user.nickname,user.registration_id);
+
+			g_array_append_val(users, user);
+
 			response = g_strdup (&REGISTRATION_RESPONSE_OK);
-			g_print ("Sending confirmation...\n");
 			g_dbus_method_invocation_return_value (invocation,
 													 g_variant_new ("(s)", response));
-			g_print ("Confirmation sent!\n");
+			g_free (response);
 		}
 		else
 		{
@@ -120,8 +126,12 @@ handle_method_call (GDBusConnection       *connection,
 			g_dbus_method_invocation_return_value (invocation,
 													 g_variant_new ("(s)", response));
 			g_free (response);
+
 		}
 
+		//struct GUser *user0 = (struct GUser*)users[0].data;
+		//g_print ("User 0 : %s %d\n",user0->nickname,user0->registration_id);
+		g_print_users_info (users);
 		g_dbus_connection_unregister_object(connection,temp_registration_id);
 
 	}
@@ -133,6 +143,8 @@ handle_method_call (GDBusConnection       *connection,
 		g_variant_get (parameters, "(&s&s)", &nick, &content);
 
 		g_print ("%s: %s\n", nick, content);
+
+
 	}
 	else
 	{
@@ -170,7 +182,7 @@ input_is_valid ()
 }
 
 GOptionEntry opt_entries[] =
-	{
+{
 	{ "address", 'a', 0, G_OPTION_ARG_STRING, &opt_address, "Address under which the server will reside", NULL },
 	{ NULL }
 };
@@ -191,7 +203,7 @@ main (int argc, char *argv[])
 
 	introspection_data = g_dbus_node_info_new_for_xml (introspection_xml, NULL);
 	g_assert (introspection_data != NULL);
-	users = NULL;
+	users = g_array_new (FALSE,TRUE,sizeof (GUser));
 
 	guid = g_dbus_generate_guid ();
 	server_flags = G_DBUS_SERVER_FLAGS_NONE;

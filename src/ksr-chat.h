@@ -1,15 +1,13 @@
 #include <glib.h>
 #include <gio/gio.h>
 
-
-// CONSTANTS
-
-const gint MAX_CHAR = 256;
-const gchar OBJECT_PATH[] = "/org/ksr/chat";
-const gchar INTERFACE_PATH[] = "org.ksr.chat.Interface";
-const gchar TMP_OBJECT_PATH[] = "/org/ksr/chat/tmp";
-const gchar REGISTRATION_RESPONSE_OK[] = "REGISTERED";
-const gchar REGISTRATION_RESPONSE_NOT_OK[] = "COULD NOT REGISTER";
+#define MAX_CHAR 256
+#define OBJECT_PATH "/org/ksr/chat"
+#define INTERFACE_PATH "org.ksr.chat.Interface"
+#define TMP_OBJECT_PATH "/org/ksr/chat/tmp"
+#define REGISTRATION_RESPONSE_OK "REGISTERED"
+#define REGISTRATION_RESPONSE_NOT_OK "COULD NOT REGISTER"
+#define GUser struct _GUser
 
 // ENUMS
 
@@ -21,10 +19,11 @@ enum POSSIBLE_ACTIONS {
 	enter_channel
 };
 
-struct GUser
+struct _GUser
 {
-	gchar                  *nickname;
+	gchar                  nickname[MAX_CHAR];
 	gint				   registration_id;
+	GDBusConnection		   *connection;
 };
 
 static void
