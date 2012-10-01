@@ -28,7 +28,6 @@ print_allowed_operations ()
 {
 	print_information("/h : print this help");
 	print_information("/l : list chat users");
-	print_information("/m <nick> : send a private message to \"nick\"");
 	print_information("/q : quit chat");
 }
 
