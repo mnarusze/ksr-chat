@@ -19,9 +19,23 @@ static const gchar introspection_xml[] =
   "   <arg name='nick' type='s' direction='in'/>"
   "   <arg name='body' type='s' direction='in'/>"
   "  </method>"
+  "  <method name='SendPrivateMessage'>"
+  "   <arg name='nick' type='s' direction='in'/>"
+  "   <arg name='target' type='s' direction='in'/>"
+  "   <arg name='body' type='s' direction='in'/>"
+  "  </method>"
+  "  <method name='ListUsers'>"
+  "   <arg name='nick' type='s' direction='in'/>"
+  "  </method>"
+  "  <method name='QuitChat'>"
+  "   <arg name='nick' type='s' direction='in'/>"
+  "  </method>"
   "  <signal name='message'>"
   "   <arg name='nick' type='s'/>"
   "   <arg name='body' type='s'/>"
+  "  </signal>"
+  "  <signal name='users_list'>"
+  "   <arg name='list' type='s'/>"
   "  </signal>"
   "  <signal name='action'>"
   "   <arg name='nick' type='s'/>"
@@ -38,15 +52,19 @@ static const GDBusInterfaceVTable interface_vtable =
 	NULL,
 };
 
-void g_print_users_info (GArray *users)
+gchar * get_users_list ()
 {
+	GString *list;
 	GUser user;
 	gint iter;
+	list = g_string_new ("Users: ");
 	for (iter = 0; iter < users->len; iter++)
 	{
 		user = g_array_index (users, GUser, iter);
-		g_print ("User no %d\n  Nick: %s\n  Registration ID: %d\n", iter , &user.nickname , user.registration_id);
+		g_string_append (list, g_strdup(" "));
+		g_string_append (list, &user.nickname);
 	}
+	return list->str;
 }
 
 static void
@@ -139,8 +157,6 @@ handle_method_call (GDBusConnection       *connection,
 													 g_variant_new ("(s)", response));
 			g_free (response);
 		}
-
-		g_print_users_info (users);
 	}
 	else if (g_strcmp0 (method_name, "SendMessage") == 0)
 	{
@@ -172,6 +188,37 @@ handle_method_call (GDBusConnection       *connection,
 															content),
 											&error);
 
+		}
+
+	}
+	else if (g_strcmp0 (method_name, "ListUsers") == 0)
+	{
+		gchar *list;
+		GError *error;
+		gchar *nickname;
+		GUser user;
+		gint iter;
+
+		list = get_users_list();
+		error = NULL;
+
+		g_variant_get (parameters, "(&s)", &nickname);
+		object_path = g_strdup_printf ("%s/%s", OBJECT_PATH,nickname);
+		for (iter = 0; iter < users->len; iter++)
+		{
+			user = g_array_index (users, GUser, iter);
+			if (g_strcmp0(nickname,user.nickname) == 0)
+			{
+				g_dbus_connection_emit_signal(user.connection,
+												NULL,
+												object_path,
+												INTERFACE_PATH,
+												"users_list",
+												g_variant_new ("(s)",
+																list),
+												&error);
+				break;
+			}
 		}
 
 	}

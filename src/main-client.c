@@ -48,6 +48,8 @@ handle_input (GIOChannel *io_channel, gpointer *data)
 		return FALSE;
 	}
 
+	input = g_regex_replace(disallowed_chars,input,g_utf8_strlen(input,MAX_CHAR),0,g_strdup(""),0,NULL);
+
 	if (input[0] == '/')
 	{
 		// Special options - handle the allowed ones
@@ -56,27 +58,41 @@ handle_input (GIOChannel *io_channel, gpointer *data)
 			case 'h':
 				print_allowed_operations();
 				break;
+			case 'l':
+				g_dbus_connection_call (connection,
+										   NULL,
+										   object_path,
+										   INTERFACE_PATH,
+										   "ListUsers",
+										   g_variant_new ("(s)", opt_name),
+										   NULL,
+										   G_DBUS_CALL_FLAGS_NONE,
+										   -1,
+										   NULL,
+										   NULL,
+										   &error);
+				break;
 			default:
 				print_information("Unknown command! Use \"/h\" for help.");
 				break;
 		}
-		return TRUE;
 	}
-
-	input = g_regex_replace(disallowed_chars,input,g_utf8_strlen(input,MAX_CHAR),0,g_strdup(""),0,NULL);
-	g_dbus_connection_call (connection,
-							   NULL, /* bus_name */
-							   object_path,
-							   INTERFACE_PATH,
-							   "SendMessage",
-							   g_variant_new ("(ss)", opt_name, input),
-							   NULL,
-							   G_DBUS_CALL_FLAGS_NONE,
-							   -1,
-							   NULL,
-							   NULL,
-							   &error);
-	g_free(input);
+	else
+	{
+		g_dbus_connection_call (connection,
+								   NULL,
+								   object_path,
+								   INTERFACE_PATH,
+								   "SendMessage",
+								   g_variant_new ("(ss)", opt_name, input),
+								   NULL,
+								   G_DBUS_CALL_FLAGS_NONE,
+								   -1,
+								   NULL,
+								   NULL,
+								   &error);
+		g_free(input);
+	}
 	return TRUE;
 }
 
@@ -94,6 +110,12 @@ handle_signals (GDBusConnection *connection,
 		gchar *nick,*body;
 		g_variant_get (parameters, "(&s&s)", &nick, &body);
 		g_print ("%s: %s\n",nick,body);
+	}
+	else if (g_strcmp0 (signal_name, "users_list") == 0)
+	{
+		gchar *list;
+		g_variant_get (parameters, "(&s)", &list);
+		print_information(list);
 	}
 	else if (g_strcmp0 (signal_name, "action") == 0)
 	{
