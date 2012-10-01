@@ -37,9 +37,11 @@ static const gchar introspection_xml[] =
   "  <signal name='users_list'>"
   "   <arg name='list' type='s'/>"
   "  </signal>"
-  "  <signal name='action'>"
+  "  <signal name='joined_chat'>"
   "   <arg name='nick' type='s'/>"
-  "   <arg name='type' type='s'/>"
+  "  </signal>"
+  "  <signal name='left_chat'>"
+  "   <arg name='nick' type='s'/>"
   "  </signal>"
   " </interface>"
   "</node>";
@@ -114,7 +116,6 @@ handle_method_call (GDBusConnection       *connection,
 			return;
 		}
 
-		g_object_ref (connection);
 		unregistered = g_dbus_connection_unregister_object(connection,temp_registration_id);
 
 		if (unregistered == FALSE)
@@ -139,6 +140,8 @@ handle_method_call (GDBusConnection       *connection,
 		}
 		else if (error == NULL)
 		{
+			gint iter;
+
 			user.registration_id = registration_id;
 			i = 0;
 			for (; i < MAX_CHAR; i++)
@@ -148,9 +151,26 @@ handle_method_call (GDBusConnection       *connection,
 					break;
 			}
 			user.connection = connection;
-			g_print ("%s joined the chat. Number : %d\n",user.nickname,user.registration_id);
+			g_print ("%s joined the chat.\n",user.nickname);
 
 			g_array_append_val(users, user);
+
+			for (iter = 0; iter < users->len ; iter++)
+			{
+				user = g_array_index (users, GUser, iter);
+				if (g_strcmp0(nickname,user.nickname) == 0)
+					continue;
+				object_path = g_strdup_printf("%s/%s", OBJECT_PATH, &user.nickname);
+				g_dbus_connection_emit_signal(user.connection,
+												NULL,
+												object_path,
+												INTERFACE_PATH,
+												"joined_chat",
+												g_variant_new ("(s)",
+																nickname),
+												&error);
+
+			}
 
 			response = g_strdup (&REGISTRATION_RESPONSE_OK);
 			g_dbus_method_invocation_return_value (invocation,
@@ -221,6 +241,57 @@ handle_method_call (GDBusConnection       *connection,
 			}
 		}
 
+	}
+	else if (g_strcmp0 (method_name, "QuitChat") == 0)
+	{
+		gchar *list;
+		GError *error;
+		gchar *nickname;
+		GUser user;
+		gint iter;
+		gint position;
+		gboolean unregistered;
+
+		position = 0;
+		list = get_users_list();
+		error = NULL;
+		g_variant_get (parameters, "(&s)", &nickname);
+
+		for (iter = 0; iter < users->len; iter++)
+		{
+			user = g_array_index (users, GUser, iter);
+			if (g_strcmp0(nickname,user.nickname) == 0)
+			{
+				// Save position for later
+				position = iter;
+
+				// Unregister object on dbus
+				unregistered = g_dbus_connection_unregister_object(connection, user.registration_id);
+				if (unregistered == FALSE)
+				{
+					g_printerr ("Error unregistering the object!\n");
+				}
+
+				// Unref the connection
+				g_object_unref (user.connection);
+			}
+			else
+			{
+				object_path = g_strdup_printf ("%s/%s", OBJECT_PATH,&user.nickname);
+				g_dbus_connection_emit_signal(user.connection,
+												NULL,
+												object_path,
+												INTERFACE_PATH,
+												"left_chat",
+												g_variant_new ("(s)",
+																nickname),
+												&error);
+			}
+		}
+		// Remove the user from users list
+		g_array_remove_index(users,position);
+
+		g_print ("%s left the chat!\n", nickname);
 	}
 	else
 	{

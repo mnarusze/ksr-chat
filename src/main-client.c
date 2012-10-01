@@ -8,6 +8,8 @@ static gchar *object_path		 = NULL;
 static GDBusConnection *connection;
 static GRegex *disallowed_chars  = NULL;
 
+static GMainLoop *loop;
+
 static GOptionEntry opt_entries[] =
 {
 	{ "name", 'n', 0, G_OPTION_ARG_STRING, &opt_name, "Client's name", NULL },
@@ -72,6 +74,23 @@ handle_input (GIOChannel *io_channel, gpointer *data)
 										   NULL,
 										   &error);
 				break;
+			case 'q':
+				g_dbus_connection_call (connection,
+										   NULL,
+										   object_path,
+										   INTERFACE_PATH,
+										   "QuitChat",
+										   g_variant_new ("(s)", opt_name),
+										   NULL,
+										   G_DBUS_CALL_FLAGS_NONE,
+										   -1,
+										   NULL,
+										   NULL,
+										   &error);
+				print_information(g_strdup_printf("KTHXBYE %s!",opt_name));
+				g_main_loop_unref (loop);
+				g_main_loop_quit (loop);
+				break;
 			default:
 				print_information("Unknown command! Use \"/h\" for help.");
 				break;
@@ -117,11 +136,18 @@ handle_signals (GDBusConnection *connection,
 		g_variant_get (parameters, "(&s)", &list);
 		print_information(list);
 	}
-	else if (g_strcmp0 (signal_name, "action") == 0)
+	else if (g_strcmp0 (signal_name, "left_chat") == 0)
 	{
-
+		gchar *nick;
+		g_variant_get (parameters, "(&s)", &nick);
+		print_information(g_strdup_printf("%s has left the chat!",nick));
 	}
-
+	else if (g_strcmp0 (signal_name, "joined_chat") == 0)
+	{
+		gchar *nick;
+		g_variant_get (parameters, "(&s)", &nick);
+		print_information(g_strdup_printf("%s has joined the chat!",nick));
+	}
 }
 
 
@@ -141,7 +167,6 @@ main (int argc, char *argv[])
 {
 	GOptionContext *opt_context;
 	GError *error;
-	GMainLoop *loop;
 	GDBusConnectionFlags connection_flags;
 	GIOChannel *io_channel;
 	GDBusProxyFlags proxy_flags;
@@ -245,8 +270,6 @@ main (int argc, char *argv[])
 			g_error ("Cannot add watch on GIOChannel!\n");
 
 	g_main_loop_run (loop);
-
-	g_main_loop_unref (loop);
 
 	ret = 0;
 
